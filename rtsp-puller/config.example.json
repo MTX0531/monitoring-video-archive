@@ -1,0 +1,152 @@
+{
+  "_readme": "大华 NVR 监控录像本地归档脚本配置文件。修改后需重启脚本才会生效。",
+
+  "nvr": {
+    "_comment_stream": "stream 可选 main(主码流) 或 sub(子码流)。本机实测两者均为 720p/约138kbps，体积一致，故用 main",
+    "_comment_transport": "transport 建议 tcp，网络不稳时 tcp 比 udp 可靠",
+    "host": "192.168.2.10",
+    "rtsp_port": 554,
+    "username": "admin",
+    "password": "<NVR_PASSWORD>",
+    "channel": 1,
+    "stream": "main",
+    "transport": "tcp"
+  },
+
+  "archive": {
+    "_comment_root_dir": "auto = 自动挑选剩余空间最大的磁盘；若最大的是 C 盘则自动放到桌面。也可写死绝对路径",
+    "_comment_folder_name": "归档文件夹名。auto = <门店名>门店监控视频归档（门店名自动取录像机设备名称），例：测试门店A门店监控视频归档。若不想让目录名跟着门店走，可填一个固定名称",
+    "_comment_folder_suffix": "folder_name 为 auto 时拼接的后缀，即 <门店名>+本后缀",
+    "_comment_start_time": "归档起始时间，即从这个时刻开始往现在拉取",
+    "_comment_end_time": "归档终点。auto=一直跟到最新录像；填时间(如 2026-09-14 17:00:00)则拉到此为止自动停止",
+    "_comment_segment": "每个视频文件的最大时长（分钟），需求为不超过 30 分钟",
+    "root_dir": "auto",
+    "folder_name": "auto",
+    "folder_suffix": "门店监控视频归档",
+    "start_time": "2026-09-14 14:55:00",
+    "end_time": "auto",
+    "segment_minutes": 30,
+    "min_segment_seconds": 60,
+    "safety_lag_seconds": 180,
+    "container": "mp4",
+    "organize_by_date": true,
+
+    "_comment_naming": "归档文件命名规则：<门店名>_<通道名>_<开始时间>_<结束时间>_<末尾标识>.mp4，例：<门店7>_通道1_20260905132941_20260905153140_device.mp4",
+    "_comment_store_name": "门店名（归档文件名第 1 段）。auto = 自动读录像机的设备名称（General.MachineName），也就是大华云联设备列表里的『设备名称/分组名称』。想强制指定就填具体名称，例如『<门店名>-总』",
+    "_comment_channel_name": "通道名（归档文件名第 2 段）。auto = 自动读录像机该通道的名称（ChannelTitle）。想强制指定就填具体名称，例如『通道1』",
+    "_comment_name_suffix": "归档文件名最后一段，跟随云联导出习惯用 device",
+    "store_name": "auto",
+    "channel_name": "auto",
+    "name_suffix": "device",
+
+    "_comment_verify_playable": "拉完后立即校验文件能否正常解码播放，不合格自动修复（先无损重封装，再转码兜底）",
+    "_comment_keep_audio": "是否保留音轨。部分音频编码 mp4 不兼容，默认关闭；需要声音时改 true（若拉取报错就改回 false 或把 container 改成 mkv）",
+    "verify_playable": true,
+    "keep_audio": false
+  },
+
+  "schedule": {
+    "_comment": "拉取时段：门店营业时间为 10:00~22:00，脚本只允许在 09:30~22:30 动录像，其余时间不拉取",
+    "_comment_mode": "footage = 只归档该时段内的录像，22:30~次日09:30 的空档直接把游标跳过、不下载（推荐，能追上）；runtime = 该时段外只暂停拉流，游标仍顺序推进（会连夜间录像一起拉，导致永远追不上，不建议）",
+    "enabled": true,
+    "start": "09:30",
+    "end": "22:30",
+    "mode": "footage"
+  },
+
+  "retention": {
+    "_comment": "留存策略：先按天数清理，再按归档总量上限清理，最后按磁盘剩余空间下限清理",
+    "_comment_keep_days": "录像保留天数，超过即永久删除",
+    "_comment_max_archive_gb": "归档目录总容量上限(GB)，0 表示不限制",
+    "_comment_min_free_gb": "磁盘剩余空间低于该值(GB)时，从最旧的录像开始删除",
+    "_comment_protect_recent_hours": "最近这么多小时内的录像受到保护，清理时不会被删",
+    "enabled": true,
+    "keep_days": 7,
+    "max_archive_gb": 0,
+    "min_free_gb": 5,
+    "protect_recent_hours": 24,
+    "delete_mode": "permanent",
+    "scan_interval_minutes": 30
+  },
+
+  "runtime": {
+    "_comment": "poll_interval_seconds: 追平后每隔多久检查一次新录像",
+    "_comment_stall_timeout_seconds": "拉流过程中多久没有数据则判定卡死并重连",
+    "poll_interval_seconds": 60,
+    "max_retries": 3,
+    "retry_backoff_seconds": 20,
+    "stall_timeout_seconds": 120,
+    "max_attempts_per_segment": 5,
+
+    "_comment_parallel_streams": "按日归档时的并发回放路数。设备单路回放恒为 1 倍速、无法快进，提速只能靠并发；实测本机（DH-NVR4216-HDS2）总量线性叠加：3 路=3.0 倍速、5 路=5.0 倍速、8 路=8.0 倍速。13 小时的日素材：1 路约 13.4 小时、6 路约 2.2 小时、8 路约 1.7 小时。注意这个额度是【整机共享】的，不是每条通道各有一份：阶梯法实测整机同时在传的会话上限为 15 路（6 路运行中 + 9 路叠加全部正常，第 16 路拿不到流），所以门店通道数一多，每通道能分到的流就变少（15 路通道 → 每路只能 1 条）。填 1 = 退回原来的顺序拉取",
+    "parallel_streams": 6,
+
+    "_comment_channel_scope": "本脚本的运行实例只归档 config 里 nvr.channel 指定的【那一个通道】。门店有多个摄像头时，要归档多路需要按通道各跑一个实例（各自独立的 config、state_file、log_dir，且 parallel_streams 之和不要超过整机 15 路上限），或等后续支持多通道模式。动手前先用 python tools/capacity_plan.py --channels N 算清素材总量、并发分配与存储缺口",
+
+    "_comment_start_stagger_seconds": "并发启动的时间间隔（秒）。实测同一瞬间并行开多路 RTSP，录像机会对其中一部分返回 401 Unauthorized，要等一个退避周期才重试成功；把启动时刻拉开一点就能完全避开。填 0 关闭",
+    "start_stagger_seconds": 1.5,
+
+    "_comment_catchup_max_days": "按日归档的自动补漏上限（天）。游标若落后于目标日（上次漏跑、或跑到一半被打断），脚本会从游标那天起逐日补到目标日，不会把中间的日子永久丢掉；但只回溯最近这么多天——停机很久之后更早的录像在设备上多半已被覆盖，硬拉只会白等几小时。填 1 = 只拉目标日本身",
+    "catchup_max_days": 7,
+
+    "ffmpeg_path": "auto",
+    "log_dir": "logs",
+    "state_file": "state/state.json",
+    "log_keep_days": 30
+  },
+
+  "hooks": {
+    "_comment": "每拉取成功一个视频后执行的外部命令，{file} 会被替换为视频路径。留空表示不执行。后续接 AI 稽核/上传 Notion 时填这里",
+    "on_segment_saved": ""
+  },
+
+  "ftp": {
+    "_comment": "NVR『录像 FTP 上传』的接收端。录像机是 push 模型：只推『录像机自己录完之后』的新文件，不能指定历史时段——补历史仍然靠 RTSP 回放拉取。本段供 tools/ftp_receiver.py 使用。",
+    "_comment_root": "收件箱目录，相对路径基于项目根目录",
+    "_comment_passive": "被动模式端口段，需要在 Windows 防火墙放行；大华上传走 PASV，这一段不通就会连接成功但传不了文件",
+    "enabled": true,
+    "bind": "0.0.0.0",
+    "port": 21,
+    "user": "nvrftp",
+    "password": "<FTP_PASSWORD>",
+    "root": "ftp-inbox",
+    "passive_port_start": 60000,
+    "passive_port_end": 60099,
+    "max_connections": 32,
+    "max_connections_per_ip": 16,
+    "banner": "nvr-ftp-test ready",
+
+    "_comment_min_free_gb": "磁盘闸门：收件箱所在磁盘剩余空间低于该值(GB)时，接收端直接拒收上传。录像机是 push 模型挡不住源头，只能在这里兜底，防止把系统盘写满",
+    "min_free_gb": 3.0,
+    "_comment_ingest": "入库开关。true = 收到的文件在后台转封装成 mp4、按 <门店>_<通道>_<起>_<止>_device.mp4 命名，放进与 RTSP 拉取**相同**的归档根目录（archive 段决定），收件箱原件随即永久销毁；false = 原样留在收件箱",
+    "ingest": true,
+
+    "_comment_idle_exit": "★ 自动收工。设成分钟数(如 10)后，接收端在【连续空闲】这么多分钟时自行退出。『空闲』= 没有任何活动连接 + 收件箱没有新文件 + 入库队列彻底消化完（含正在转码的那一件），三者同时成立才计时，任一条不成立就清零重来。设备推完一批会断开再连下一批，只看『最后到货时间』会把批次间的空档误判成收工。设 0 = 关闭（一直跑，靠人工停）。临时覆盖：--idle-exit 10",
+    "idle_exit_minutes": 10,
+
+    "_comment_idle_check": "空闲探测间隔(秒)。取小了纯属浪费，取大了会让收工判定变钝",
+    "idle_check_seconds": 30,
+
+    "_comment_conn_active": "『连接上还有动作』的判定窗口(秒)。★ 录像机推完一批后会**保持长连接不断开**（实测挂 30 分钟以上），所以判定用的是『连接最近有没有动静』而不是『有没有连接』。窗口需大于设备换批的间隔，否则会误判成收工。留空或 0 = 自动取 idle_check_seconds 的 2 倍，下限 30 秒",
+    "conn_active_seconds": 90,
+
+    "_comment_drain_timeout": "收工前最多等入库消化多久(分钟)。超时就放弃等待并如实记录——绝不会为了『按时收工』去打断正在转码的段（打断会留下打不开的半成品）",
+    "drain_timeout_minutes": 60,
+
+    "_comment_close_device": "★ 收工后是否自动关掉设备端的『录像 FTP 上传』(NAS[0].Enable=false)。关闭前会把设备原始配置存一份快照到 state/nas_before_idle_exit_*.txt 供回滚，关完回读确认；失败只记日志，不影响收工。临时跳过：--no-close-device",
+    "close_device_on_exit": true
+  },
+
+  "device": {
+    "_comment": "从录像机读取真实名称，用于归档文件命名。门店名取 General.MachineName（= 大华云联里的设备名称/分组名称），通道名取 ChannelTitle。",
+    "_comment_enabled": "true = 启动时自动从录像机读取名称；false = 只用配置里写死的 store_name/channel_name",
+    "_comment_http_port": "录像机 Web 管理端口，大华默认 80",
+    "_comment_cache_file": "名称缓存文件。读不到设备时用缓存兜底，保证拉取不中断",
+    "_comment_refresh_hours": "缓存有效小时数，超过则重新读取（0 = 每次都重新读）",
+    "enabled": true,
+    "http_port": 80,
+    "cache_file": "state/device.json",
+    "refresh_hours": 24,
+    "timeout_seconds": 6.0
+  }
+}
